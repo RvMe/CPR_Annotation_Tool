@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医学影像标注工具 - CPR Annotation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧工具栏 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>标注工具</h2>
+            </div>
+
+            <!-- 医生信息 -->
+            <div class="section">
+                <h3>医生信息</h3>
+                <div class="input-group">
+                    <label for="doctorName">医生名字:</label>
+                    <input type="text" id="doctorName" placeholder="请输入名字">
+                    <button id="setDoctorBtn" class="btn btn-primary">确认</button>
+                </div>
+                <div id="doctorDisplay" class="info-display"></div>
+            </div>
+
+            <!-- 数据目录 -->
+            <div class="section">
+                <h3>数据目录</h3>
+                <div class="input-group">
+                    <input type="text" id="dataDirectory" placeholder="选择或输入目录路径">
+                    <button id="browseBtn" class="btn btn-secondary">浏览</button>
+                    <button id="setDirBtn" class="btn btn-primary">加载</button>
+                </div>
+                <div id="fileCount" class="info-display"></div>
+            </div>
+
+            <!-- 文件列表 -->
+            <div class="section">
+                <h3>数据文件</h3>
+                <div id="fileList" class="file-list">
+                    <p class="placeholder">请先选择数据目录</p>
+                </div>
+            </div>
+
+            <!-- 当前文件信息 -->
+            <div class="section">
+                <h3>当前文件</h3>
+                <div id="currentFileInfo" class="info-display">
+                    <p class="placeholder">未加载数据</p>
+                </div>
+            </div>
+
+            <!-- 保存按钮 -->
+            <div class="section">
+                <button id="saveBtn" class="btn btn-success btn-large" disabled>保存标注</button>
+                <div id="saveStatus" class="status-message"></div>
+            </div>
+        </div>
+
+        <!-- 中间视图区域 -->
+        <div class="viewer-area">
+            <!-- 顶部工具栏 -->
+            <div class="toolbar">
+                <div class="tool-group">
+                    <span class="tool-label">鼠标操作:</span>
+                    <span class="mouse-help">左键拖动=框选 | 滚轮=缩放 | 中键拖动=平移 | 右键拖动=调整Z轴</span>
+                </div>
+                <div class="tool-group">
+                    <span class="tool-label">缩放:</span>
+                    <button id="zoomInBtn" class="tool-btn" title="放大">+</button>
+                    <button id="zoomOutBtn" class="tool-btn" title="缩小">-</button>
+                    <button id="resetZoomBtn" class="tool-btn" title="重置">⟲</button>
+                </div>
+                <div class="tool-group" style="flex: 1; margin-left: 20px;">
+                    <span class="tool-label">标注进度:</span>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                        <span class="progress-text" id="progressText">0%</span>
+                    </div>
+                </div>
+                <div class="tool-group">
+                    <span class="tool-label" id="hoverInfo">悬停: --</span>
+                </div>
+            </div>
+
+            <!-- CPR视图 -->
+            <div class="cpr-views">
+                <!-- X轴视图 -->
+                <div class="view-container">
+                    <div class="view-header">
+                        <h4>X轴截面 (固定中心)</h4>
+                        <div class="view-controls">
+                            <span id="xAxisInfo"></span>
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="xCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Y轴视图 -->
+                <div class="view-container">
+                    <div class="view-header">
+                        <h4>Y轴截面 (固定中心)</h4>
+                        <div class="view-controls">
+                            <span id="yAxisInfo"></span>
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="yCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Z轴视图 -->
+                <div class="view-container">
+                    <div class="view-header">
+                        <h4>Z轴截面 (可滑动)</h4>
+                        <div class="view-controls">
+                            <span id="zAxisInfo"></span>
+                            <input type="range" id="zSlider" min="0" max="100" value="50">
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="zCanvas"></canvas>
+                        <div id="zAnnotationOverlay" class="annotation-overlay"></div>
+                    </div>
+                    <!-- 窗宽窗位触控板 -->
+                    <div class="wl-control-panel">
+                        <div class="wl-touchpad" id="wlTouchpad">
+                            <div class="wl-info">
+                                <span id="wlInfoText">窗宽: 400 | 窗位: 40</span>
+                            </div>
+                            <div class="wl-hint">左右=窗宽 | 上下=窗位</div>
+                        </div>
+                        <button id="wlResetBtn" class="btn btn-small btn-secondary" title="重置窗宽窗位">重置</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧标注面板 -->
+        <div class="annotation-panel">
+            <div class="panel-header">
+                <h3>标注选项</h3>
+            </div>
+
+            <div class="annotation-form">
+                <!-- 快速标注按钮 -->
+                <div class="form-section">
+                    <h4>快速标注</h4>
+                    <button id="quickNormalBtn" class="btn btn-success btn-large" disabled>
+                        ✓ 典型正常段
+                    </button>
+                </div>
+
+                <!-- Z轴区间 -->
+                <div class="form-section">
+                    <h4>标注区间</h4>
+                    <div class="range-display">
+                        <div class="range-item">
+                            <label>起始 Z:</label>
+                            <input type="number" id="zStartInput" min="0" value="0">
+                        </div>
+                        <div class="range-item">
+                            <label>结束 Z:</label>
+                            <input type="number" id="zEndInput" min="0" value="0">
+                        </div>
+                        <button id="clearRangeBtn" class="btn btn-small">清除选择</button>
+                    </div>
+                </div>
+
+                <!-- 维度A: 斑块存在性 -->
+                <div class="form-section">
+                    <h4>维度A: 斑块存在性</h4>
+                    <div class="radio-group">
+                        <label><input type="radio" name="presence" value="1" checked> 有斑块</label>
+                        <label><input type="radio" name="presence" value="-1"> 无斑块</label>
+                        <label><input type="radio" name="presence" value="0"> 怀疑有斑块</label>
+                        <label><input type="radio" name="presence" value="null"> 无法判断</label>
+                    </div>
+                </div>
+
+                <!-- 维度B: 斑块类型 -->
+                <div class="form-section">
+                    <h4>维度B: 斑块类型</h4>
+                    <div class="radio-group">
+                        <label><input type="radio" name="typeMain" value="0"> 不确定</label>
+                        <label><input type="radio" name="typeMain" value="1"> 钙化</label>
+                        <label><input type="radio" name="typeMain" value="2"> 非钙化</label>
+                        <label><input type="radio" name="typeMain" value="3"> 混合</label>
+                    </div>
+                </div>
+
+                <!-- 维度C: 排除类型 -->
+                <div class="form-section">
+                    <h4>维度C: 确定不是 (多选)(可不选)</h4>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" name="typeExclude" value="not_CP"> 确定不是钙化</label>
+                        <label><input type="checkbox" name="typeExclude" value="not_NCP"> 确定不是非钙化</label>
+                        <label><input type="checkbox" name="typeExclude" value="not_MP"> 确定不是混合</label>
+                    </div>
+                </div>
+
+                <!-- 维度D: 狭窄程度 -->
+                <div class="form-section">
+                    <h4>维度D: 狭窄程度</h4>
+                    <div class="radio-group">
+                        <label><input type="radio" name="stenosis" value="0"> &lt;25%</label>
+                        <label><input type="radio" name="stenosis" value="1"> 25-49%</label>
+                        <label><input type="radio" name="stenosis" value="2"> 50-69%</label>
+                        <label><input type="radio" name="stenosis" value="3"> ≥70%</label>
+                        <label><input type="radio" name="stenosis" value="4"> 无法判断</label>
+                    </div>
+                </div>
+
+                <!-- 维度E: 置信度 -->
+                <div class="form-section">
+                    <h4>维度E: 置信度</h4>
+                    <div class="radio-group">
+                        <label><input type="radio" name="confidence" value="2" checked> 高</label>
+                        <label><input type="radio" name="confidence" value="1"> 中</label>
+                        <label><input type="radio" name="confidence" value="0"> 低</label>
+                    </div>
+                </div>
+
+                <!-- 标注总结 -->
+                <div class="annotation-summary">
+                    <h4>标注总结</h4>
+                    <div id="annotationSummary" class="summary-placeholder">请完成上述选项以生成总结</div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="form-actions">
+                    <button id="addAnnotationBtn" class="btn btn-primary btn-large" disabled>添加标注</button>
+                    <button id="updateAnnotationBtn" class="btn btn-warning btn-large" style="display:none;">更新标注</button>
+                    <button id="cancelEditBtn" class="btn btn-secondary" style="display:none;">取消编辑</button>
+                </div>
+            </div>
+
+            <!-- 标注列表 -->
+            <div class="annotations-list">
+                <h4>已标注区域</h4>
+                <div id="annotationsList" class="list-container">
+                    <p class="placeholder">暂无标注</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div id="contextMenu" class="context-menu" style="display:none;">
+        <div class="menu-item" id="deleteAnnotationMenu">删除标注</div>
+    </div>
+
+    <!-- Toast通知容器 -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/viewer.js') }}"></script>
+</body>
+</html>
